@@ -63,7 +63,7 @@ def static(lmax=5, res=300):
                     ft += zs[k]*zernike_FT(n_,m_)(rho,phi)
             else:
                 ft += CHSH_FT(l,m)(rho,phi)
-            img = ax[i, j].pcolormesh(X, Y, np.abs(ft), cmap='plasma')
+            img = ax[i, j].pcolormesh(X, Y, np.abs(ft), cmap='plasma', rasterized=True)
             images.append(img)
             img.set_norm(norm)
             ax[i, j].set_xlim(-16, 16)
@@ -72,7 +72,7 @@ def static(lmax=5, res=300):
     # Save!
     #fig.suptitle("Vis squared for each spherical harmonic")
     fig.colorbar(images[0], ax=ax[0,-1], orientation='horizontal', fraction=1)
-    fig.savefig(paths.figures / "ylms_nullspace_amp.pdf", bbox_inches="tight", dpi=300, rasterized=True)
+    fig.savefig(paths.figures / "ylms_nullspace_amp.pdf", bbox_inches="tight", dpi=300)
     plt.close()
     
 static(lmax=5)
