@@ -19,13 +19,11 @@
 % Main body with filleatmor text
 \section{Introduction}
 \label{sec:intro}
-*Why is mapping the surfaces of stars important?
-
 Recent advances in optical long-baseline interferometers have increasingly permitted the imaging and detection of features such as spots and faculae on the surfaces of individual stars. The longest baselines have so far permitted imaging of the surfaces of large, evolved stars with active chromospheres \citep{roettenbacher2016, martinez2021}. More recent advances could soon permit the detection of such features even on nearby main-sequence stars \citep{mourard2018, roettenbacher2022}.
 
 Other techniques exist to probe the surfaces of stars outside the Sun that have been used on a wider variety of stars, such as Doppler imaging \citep{vogt1987}, light curve inversion \citep{harmon2000} (including using occultations from companion stars or exoplanets as in \citet{morris2017}). However, these methods can have limitations in their ability to definitively resolve features, demonstrated by \cite{roettenbacher2017}, whose comparative study revealed significant differences in spot maps obtained by the three methods of interferometry, Doppler imaging, and light curve inversion. 
 
-These discrepancies can be understood from the information theory of each method. * understood as ill-posed problems with multiple solutions * Null spaces of each method are described in starry papers * often resolved with use of regularizers
+These discrepancies can be understood from the information theory of each method. Doppler imaging and rotational light curve mapping are both understood to be ill-posed problems, where data are consistent with more than one solution. In the case of rotational light curve mapping, there are in fact an infinite number of surface maps that can analytically fit a given light curve (a fact that was first recognized by \citet{russell1906}). \citet{khoklova1976} formalized the problem of mapping a star spectroscopically as an integral equation and others \citep{goncharskii1977, piskunov1990} recognized the problem as ill-posed. With both photometric and spectroscopic methods, regularizers such as maximum entropy \citep{narayan1986} or Tikhonov regularization \citep{tikhonov1987} are often used as a means of reducing the space of possible solutions. However, these and other regularizers can also have the unintended consequence of casting one's assumptions onto the solution space, biasing the resultant map by either suppressing or introducing details \citep{piskunov1990b}. A formal description of the degeneracies of each problem is presented in \citet{luger2021a, Luger2021b}, with newer analytic methods allowing a description of the information present in a given dataset and allowing distributions for the surface map parameters to be produced. 
 
 Interferometry remains the only direct method for imaging the surfaces of stars which is possible using current technology. Nevertheless, interferometric imaging of stellar surfaces is itself an ill-posed problem due to the incomplete baseline coverage of the interferometer, which leads to significant gaps in the Fourier domain (or $uv$ plane). 
 
@@ -33,13 +31,7 @@ In Sec.~\ref{sec:maps}, we show that if a star's surface is described using sphe
 \section{Interferometry in the spherical harmonic basis}
 \label{sec:maps}
 
-Suppose that we have a spherical star whose intensity map, projected into a 2D at a specific viewing orientation, is defined as $I(x,y)$. Finding the total brightness of the star at that orientation is a sum over the visible surface of the star: 
-
-\begin{equation}
-F = \iint I(x,y) dx dy
-\end{equation}
- 
-Finding the intensity map of a star given the disk-integrated brightness of a body as it rotates finds an closed-form solution in e.g. \citep{cowan2013} (and implemented in the open-source \texttt{starry} package by \citep{starry2019}) that, among other things, permits a description of the information content of photometric data. This is done first by representing the surface map of a star using the real spherical harmonics. If the 3d surface of a star is represented using spherical harmonic coefficients $\mathbf{y}$, then we can write the intensity map as:
+Suppose that we have a spherical star whose intensity map, projected into a 2D at a specific viewing orientation, is defined as $I(x,y)$. If the 3d surface of a star is represented using the real spherical harmonics, then we can write the intensity map as:
  
 \begin{equation}
     I(x,y) = \mathbf{\tilde{y}}^\top(x,y) \ \mathbf{R} \ \mathbf{y}
@@ -54,11 +46,15 @@ V(u,v) = \iint I(x,y) e^{i(ux + vy)} dxdy
 \end{equation}
 where $V$ is the visibility at baseline (u,v). Using the spherical harmonic basis, the problem is linear, meaning we can write the integral as:
 
-\begin{equation}
+\begin{equation} \label{eq:ydoubleintegral}
    V(u,v) = \iint \mathbf{\tilde{y}}^\top(x,y) \ e^{i(ux + vy)} \ dxdy \ \mathbf{R} \ \mathbf{y}
-\end{equation}
-where $\mathbf{R} \ \mathbf{y}$ are not dependant on x and y and can therefore be pulled out of the integral. 
+\end{equation} 
+where $\mathbf{R} \ \mathbf{y}$ are not dependant on x and y and can therefore be pulled out of the integral. In the case of $u, v = 0$, Eq.~\ref{eq:ydoubleintegral} reduces to the disk-integrated brightness of a body as it rotates:
 
+\begin{equation} \label{eq:ydoubleintegral}
+   F = \iint \mathbf{\tilde{y}}^\top(x,y) \ dxdy \ \mathbf{R} \ \mathbf{y}
+\end{equation}
+where F is the observed flux. This equation finds a closed-form solution in e.g. \citep{cowan2013} and implemented in the open-source \texttt{starry} package by \citep{starry2019} that, among other things, permits a description of the information content of photometric data.
 
 \subsection{Analytic limb darkening}
 
