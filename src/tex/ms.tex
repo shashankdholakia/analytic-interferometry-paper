@@ -1,7 +1,7 @@
 % Define document class
 \documentclass[modern]{aastex631}
 \usepackage{showyourwork}
-\usepackage{amsmath}
+\usepackage{amsmath,esint}
 
 % Begin!
 \begin{document}
@@ -23,38 +23,55 @@ Recent advances in optical long-baseline interferometers have increasingly permi
 
 Other techniques exist to probe the surfaces of stars outside the Sun that have been used on a wider variety of stars, such as Doppler imaging \citep{vogt1987}, light curve inversion \citep{harmon2000} (including using occultations from companion stars or exoplanets as in \citet{morris2017}). However, these methods can have limitations in their ability to definitively resolve features, demonstrated by \cite{roettenbacher2017}, whose comparative study revealed significant differences in spot maps obtained by the three methods of interferometry, Doppler imaging, and light curve inversion. 
 
-These discrepancies can be understood from the information theory of each method. Doppler imaging and rotational light curve mapping are both understood to be ill-posed problems, where data are consistent with more than one solution. In the case of rotational light curve mapping, there are in fact an infinite number of surface maps that can analytically fit a given light curve (a fact that was first recognized by \citet{russell1906}). \citet{khoklova1976} formalized the problem of mapping a star spectroscopically as an integral equation and others \citep{goncharskii1977, piskunov1990} recognized the problem as ill-posed. With both photometric and spectroscopic methods, regularizers such as maximum entropy \citep{narayan1986} or Tikhonov regularization \citep{tikhonov1987} are often used as a means of reducing the space of possible solutions. However, these and other regularizers can also have the unintended consequence of casting one's assumptions onto the solution space, biasing the resultant map by either suppressing or introducing details \citep{piskunov1990b}. A formal description of the degeneracies of each problem is presented in \citet{luger2021a, Luger2021b}, with newer analytic methods allowing a description of the information present in a given dataset and allowing distributions for the surface map parameters to be produced. 
+These discrepancies can be understood from the information theory of each method. Doppler imaging and rotational light curve mapping are both understood to be ill-posed problems, where data are consistent with more than one solution. In the case of rotational light curve mapping, there are in fact an infinite number of surface maps that can analytically fit a given light curve (a fact that was first recognized by \citet{russell1906}). \citet{khoklova1976} formalized the problem of mapping a star spectroscopically as an integral equation and others \citep{goncharskii1977, piskunov1990} recognized the problem as ill-posed. With both photometric and spectroscopic methods, regularizers such as maximum entropy \citep{narayan1986} or Tikhonov regularization \citep{tikhonov1987} are often used as a means of reducing the space of possible solutions. However, these and other regularizers can also have the unintended consequence of casting one's assumptions onto the solution space, potentially biasing the resultant map by either suppressing or introducing details \citep{piskunov1990b}. 
 
-Interferometry remains the only direct method for imaging the surfaces of stars which is possible using current technology. Nevertheless, interferometric imaging of stellar surfaces is itself an ill-posed problem due to the incomplete baseline coverage of the interferometer, which leads to significant gaps in the Fourier domain (or $uv$ plane). 
+A formal description of the degeneracies of photometric and spectroscopic stellar surface mapping is presented in \citet{luger2021a, Luger2021b}. These works provide newer analytic methods to forward model photometric and spectroscopic observations, which permit a description of the information theory behind the mapping problem. 
+
+The analytic, linear frameworks for describing a stellar surface in \citet{luger2021a, Luger2021b} rely on describing the stellar surface in terms of the real spherical harmonics. This is in contrast to other methods that discretize the model stellar surface and perform numerical integrations over these pixels to recover observed quantities such as the light curve or Least-Squares Deconvolution (LSD) profiles. \textcolor{red}{cite some discretization papers}. This work also heavily relies on the spherical harmonics to provide such analytic quantities; we therefore provide a brief introduction to them below. 
+
+The spherical harmonics are in general an attractive basis for the description of stellar surfaces due to their unique properties on the sphere. In particular, they are closed under rotation, allowing the rotation of a star to be described analytically and efficiently. 
+
+\textcolor{red}{describe real spherical harmonics, perhaps show plot}
+
+Interferometry remains the only direct method for imaging the surfaces of stars which is possible using current technology. Nevertheless, interferometric imaging of stellar surfaces is itself an ill-posed problem. Unlike in standard imaging, a two-telescope interferometer only samples one point in the frequency domain. The incomplete baseline coverage of the interferometer leads to significant gaps in the frequency domain, also known as the $uv$ plane.
 
 In Sec.~\ref{sec:maps}, we show that if a star's surface is described using spherical harmonics, there exists a linear operation with closed-form expressions to produce interferometric observables. In Sec.~\ref{sec:rotsynthesis}, we introduce the concept of `stellar rotation synthesis' as applied to the interferometry of resolved rotating bodies and describe the information content of such data. In  Sec.~\ref{sec:harmonix}, we describe the implementation of this model in the open-source code package \texttt{harmonix} developed in the \texttt{Jax} framework. Lastly, we summarize the methods and the paper in Sec.~\ref{sec:discussions}.
 \section{Interferometry in the spherical harmonic basis}
 \label{sec:maps}
 
-Suppose that we have a spherical star whose intensity map, projected into a 2D at a specific viewing orientation, is defined as $I(x,y)$. If the 3d surface of a star is represented using the real spherical harmonics, then we can write the intensity map as:
- 
+Suppose that we have a spherical star whose intensity map, projected into a 2D at a specific viewing orientation, is defined as $I(x,y)$. If the 3d surface of a star is represented using the real spherical harmonics, then we can write the specific intensity at a point $(x,y)$ on the surface as:
+
 \begin{equation}
     I(x,y) = \mathbf{\tilde{y}}^\top(x,y) \ \mathbf{R} \ \mathbf{y}
 \end{equation}
 
-where $\mathbf{\tilde{y}}^\top(x,y)$ is the spherical harmonic basis, $\mathbf{R}$ is the rotation matrix into the correct viewing orientation with the viewer at $+\infty$ along the z axis and $\mathbf{y}$ is the vector of spherical harmonic coefficients \citep{starry2019}. Because spherical harmonics form an orthonormal basis on a unit sphere, any map can be represented using a sufficiently high order expansion in the spherical harmonics. This makes it a natural choice to represent the surfaces of stars, planets and other approximately spherical bodies.
+where $\mathbf{\tilde{y}}^\top(x,y)$ is the spherical harmonic basis \textcolor{red}{should we redefine the spherical harmonic basis here?}, $\mathbf{R}$ is the rotation matrix into the correct viewing orientation with the viewer at $+\infty$ along the z axis and $\mathbf{y}$ is the vector of spherical harmonic coefficients \citep{starry2019}. Because spherical harmonics form an orthonormal basis on a unit sphere, any map can be represented using a sufficiently high order expansion in the spherical harmonics. This makes it a natural choice to represent the surfaces of stars, planets and other approximately spherical bodies.
 
 Here we show that it is possible to use the same description of the surface of a star in terms of spherical harmonics to compute analytic observables used in interferometry. Recall that interferometric observations record a quantity called the visibility. The van-Cittert Zernike theorem relates the intensity map of a star to its visibility using the Fourier transform:
 
-\begin{equation}
-V(u,v) = \iint I(x,y) e^{i(ux + vy)} dxdy
+\begin{equation} \label{eq:vcztheorem}
+V(u,v) = \oiint\limits_{\mathrm{S}(x,y)} I(x,y) e^{-i(ux + vy)} dS
 \end{equation}
-where $V$ is the visibility at baseline (u,v). Using the spherical harmonic basis, the problem is linear, meaning we can write the integral as:
+where $V$ is the complex visibility at spatial frequency $(u,v)$ and $\mathrm{S}$ is the projected disk of the star as a function of $(x,y)$. Using the spherical harmonic basis, we can write the integral as:
 
-\begin{equation} \label{eq:ydoubleintegral}
-   V(u,v) = \iint \mathbf{\tilde{y}}^\top(x,y) \ e^{i(ux + vy)} \ dxdy \ \mathbf{R} \ \mathbf{y}
+\begin{equation} \label{eq:fourierintegral}
+   V(u,v) = \oiint\limits_{\mathrm{S}(x,y)} \mathbf{\tilde{y}}^\top(x,y) \ e^{-i(ux + vy)} \ dS \ \mathbf{R} \ \mathbf{y}
 \end{equation} 
-where $\mathbf{R} \ \mathbf{y}$ are not dependant on x and y and can therefore be pulled out of the integral. In the case of $u, v = 0$, Eq.~\ref{eq:ydoubleintegral} reduces to the disk-integrated brightness of a body as it rotates:
+where $\mathbf{R} \ \mathbf{y}$ are not dependant on x and y and can therefore be pulled out of the integral. In the case of $u, v = 0$, Eq.~\ref{eq:fourierintegral} reduces to the disk-integrated brightness of a body as it rotates:
 
-\begin{equation} \label{eq:ydoubleintegral}
-   F = \iint \mathbf{\tilde{y}}^\top(x,y) \ dxdy \ \mathbf{R} \ \mathbf{y}
+\begin{equation} \label{eq:fluxintegral}
+   F = \oiint\limits_{\mathrm{S}(x,y)} \mathbf{\tilde{y}}^\top(x,y) \ dS \ \mathbf{R} \ \mathbf{y}
 \end{equation}
-where F is the observed flux. This equation finds a closed-form solution in e.g. \citep{cowan2013} and implemented in the open-source \texttt{starry} package by \citep{starry2019} that, among other things, permits a description of the information content of photometric data.
+where $F$ is the observed flux as a star rotates (i.e the light curve). This equation finds a closed-form solution in e.g. \citep{cowan2013} and more generally in the open-source \texttt{starry} package by \citep{starry2019} that, among other things, permits a description of the information content of photometric data.
+\textcolor{red}{Should V, F be explicitly functions of time $t$, and should they be bolded to represent that they are vectors?}
+\subsection{Solving the Fourier integral}
+
+To solve the integral in Eq.~\ref{eq:fourierintegral}, we first reparametrize the projected disk of the star in the polar coordinate system with variables $r, \theta$. The spatial frequencies are also reparametrized as $\rho, \phi$:
+\begin{equation} \label{eq:polarform}
+   V(\rho,\phi) = \int_{0}^{2\pi}\int_{0}^{1} \mathbf{\tilde{y}}^\top(r, \theta) \ e^{-i\rho r\cos{(\phi-\theta)}} \ r dr d\theta \ \mathbf{R} \ \mathbf{y}
+\end{equation} 
+where the integral is explicitly bounded over a projected unit disk. 
+
 
 \subsection{Analytic limb darkening}
 
