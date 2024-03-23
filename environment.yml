@@ -4,4 +4,6 @@ dependencies:
   - conda-forge::python=3.9
   - pip:
       - matplotlib==3.4.3
+      - skyfield
+      - pandas
       - git+https://github.com/shashankdholakia/harmonix.git

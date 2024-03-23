@@ -68,7 +68,7 @@ def loglike_photometry(model, data, noise, t):
     theta = model.rotational_phase(t)
     y = Ylm.from_dense(model.data)
     star = Map(y=y, inc=star_interferometry.map.inc, obl=star_interferometry.map.obl, period=star_interferometry.map.period, u=star_interferometry.map.u)
-    light_curve = vmap(partial(map_light_curve, star))(theta=theta)
+    light_curve = vmap(partial(map_light_curve, star, r=0., xo=1., yo=1., zo=1.))(theta=theta)
     return -0.5 * jnp.sum((light_curve - data) ** 2 / noise ** 2)
 
 nmax = lambda l_max: l_max**2 + 2 * l_max + 1
@@ -269,7 +269,7 @@ plt.savefig(paths.figures / f'cov_vis_cp.pdf')
 
 fig = plt.figure()
 t_lc = jnp.linspace(0,10,1000, endpoint=False)
-light_curve_data = vmap(partial(map_light_curve, star_interferometry.map))(theta=star_interferometry.rotational_phase(t_lc))
+light_curve_data = vmap(partial(map_light_curve, star_interferometry.map, r=0., xo=1., yo=1., zo=1.))(theta=star_interferometry.rotational_phase(t_lc))
 lc_noise = 1e-5
 light_curve_data+= jax.random.normal(jax.random.PRNGKey(0), light_curve_data.shape)*lc_noise
 plt.plot(t_lc, light_curve_data)
