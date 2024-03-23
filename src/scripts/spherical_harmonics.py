@@ -38,6 +38,7 @@ def ylms(lmax=5, res=300, hsh=False):
         axis.spines['right'].set_visible(False)
         axis.spines['bottom'].set_visible(False)
         axis.spines['left'].set_visible(False)
+        axis.set_rasterization_zorder(0)
     for l in range(lmax + 1):
         ax[l, 0].set_ylabel(
             "l=%d" % l,
@@ -91,10 +92,16 @@ def ylms(lmax=5, res=300, hsh=False):
 
     # Save!
     append = '' if (not hsh) else '_hsh_colors'
-    fig.savefig(paths.figures / f"ylms{append}.png", bbox_inches="tight", dpi=300)
+    fig.savefig(paths.figures / f"ylms{append}.pdf", bbox_inches="tight", dpi=300)
     plt.close()
-    
+
+ylms()
+ylms(hsh=True)
+ylms(hsh=False)
+
+"""
 if __name__ == "__main__":
     ylms()
     ylms(hsh=True)
     ylms(hsh=False)
+"""
