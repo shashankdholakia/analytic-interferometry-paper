@@ -38,7 +38,7 @@ def ylms(lmax=5, res=300, hsh=False):
         axis.spines['right'].set_visible(False)
         axis.spines['bottom'].set_visible(False)
         axis.spines['left'].set_visible(False)
-        axis.set_rasterization_zorder(0)
+        axis.set_rasterization_zorder(-1)
     for l in range(lmax + 1):
         ax[l, 0].set_ylabel(
             "l=%d" % l,
@@ -72,7 +72,6 @@ def ylms(lmax=5, res=300, hsh=False):
             map = Ylm.from_dense(y)
             star_map = Map(y=map)
             flux = star_map.render(res=res)
-
             # Plot the spherical harmonic
             if not hsh:
                 ax[i, j].imshow(flux, cmap='plasma',
@@ -92,7 +91,9 @@ def ylms(lmax=5, res=300, hsh=False):
 
     # Save!
     append = '' if (not hsh) else '_hsh_colors'
-    fig.savefig(paths.figures / f"ylms{append}.pdf", bbox_inches="tight", dpi=300)
+    fig.savefig(paths.figures / f"ylms{append}.png", bbox_inches="tight", dpi=300)
+    #default backend somehow doesn't plot l,m=0 for pdf specifically
+    fig.savefig(paths.figures / f"ylms{append}.pdf", bbox_inches="tight", backend='pgf', dpi=300)
     plt.close()
 
 ylms()
