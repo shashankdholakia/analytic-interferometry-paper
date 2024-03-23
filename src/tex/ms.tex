@@ -72,6 +72,16 @@ To solve the integral in Eq.~\ref{eq:fourierintegral}, we first reparametrize th
 \end{equation} 
 where the integral is explicitly bounded over a projected unit disk. 
 
+\begin{figure}[ht!]
+    \script{spherical_harmonics.py}
+    \begin{centering}
+        \includegraphics[width=\linewidth]{figures/ylms_hsh_colors.pdf}
+        \caption{
+        Spherical harmonics of degree $l=5$. The hemispheric harmonics are plotted in red and the complementary hemispheric harmonics in blue.
+        }
+        \label{fig:pyramid}
+    \end{centering}
+\end{figure}
 
 \subsection{Analytic limb darkening}
 
@@ -79,16 +89,6 @@ where the integral is explicitly bounded over a projected unit disk.
 \label{sec:rotsynthesis}
 Null space description of interferometric data
 
-\begin{figure}[ht!]
-    \script{null_space_pyramid.py}
-    \begin{centering}
-        \includegraphics[width=\linewidth]{figures/ylms_nullspace_amp.pdf}
-        \caption{
-            Plot showing the Fourier transform of each term in the spherical harmonic basis
-        }
-        \label{fig:pyramid}
-    \end{centering}
-\end{figure}
 
 Plot showing the null space of interferometry, DI and LI together
 \section{Implementation in harmonix}
