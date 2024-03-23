@@ -149,9 +149,9 @@ ax.set_ylabel("V (lambdas)")
 fig1.savefig(paths.figures / 'alioth_uv_coverage.pdf', dpi=300)
 
 print("Loading star map...")
-y_star = np.load(paths.data / "spot_map_hd.npy")
+y_star = np.load(paths.data / "spot_map.npy")
 y = Ylm.from_dense(y_star)
-star = Map(y=y, inc=jnp.radians(60.), obl=0, period=1.0, u=[0.1, 0.1])
+star = Map(y=y, inc=jnp.radians(90.), obl=0, period=1.0, u=[0.1, 0.1])
 star_interferometry = Harmonix(star)
 radius = 1.47
 
