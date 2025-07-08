@@ -6,8 +6,8 @@ import zodiax as zdx
 import numpy as np
 from harmonix.harmonix import Harmonix, visibilities, closure_phases
 from harmonix.utils import maketriples_all, makebaselines
-from jaxoplanet.experimental.starry import Map, Ylm, show_map
-from jaxoplanet.experimental.starry.light_curves import map_light_curve
+from jaxoplanet.starry import Surface, Ylm, show_surface
+from jaxoplanet.starry.light_curves import surface_light_curve
 
 
 import matplotlib.pyplot as plt
@@ -67,8 +67,8 @@ def loglike_cp(model, data, noise, radius, u, v, t, index_cps1, index_cps2, inde
 def loglike_photometry(model, data, noise, t):
     theta = model.rotational_phase(t)
     y = Ylm.from_dense(model.data)
-    star = Map(y=y, inc=star_interferometry.map.inc, obl=star_interferometry.map.obl, period=star_interferometry.map.period, u=star_interferometry.map.u)
-    light_curve = vmap(partial(map_light_curve, star))(theta=theta)
+    star = Surface(y=y, inc=star_interferometry.surface.inc, obl=star_interferometry.surface.obl, period=star_interferometry.surface.period, u=star_interferometry.surface.u)
+    light_curve = vmap(partial(surface_light_curve, star, r=0., x=0., y=0., z=0.))(theta=theta)
     return -0.5 * jnp.sum((light_curve - data) ** 2 / noise ** 2)
 
 nmax = lambda l_max: l_max**2 + 2 * l_max + 1
@@ -135,77 +135,78 @@ u = np.concatenate(uv_by_wav[:,:,0],axis=0)
 v = np.concatenate(uv_by_wav[:,:,1],axis=0)
 wavs = wav.repeat(HOUR_ANGLES,axis=0).repeat(u.shape[1], axis=0)
 
-print("Loading star map...")
+print("Loading star surface...")
 y_star = np.load(paths.data / "spot_map_hd.npy")
 y = Ylm.from_dense(y_star)
-inc = 75.
-star = Map(y=y, inc=jnp.radians(inc), obl=0, period=1.0, u=[0.1, 0.1])
-star_interferometry = Harmonix(star)
-    
-lm_to_n = lambda l,m : l**2+l+m
-l_max = lambda y: int(jnp.floor(jnp.sqrt(len(y)-1)))
-lmax = l_max(y_star)
+incs = [0., 30., 45., 60., 75., 90.]
+for inc in incs:
+    star = Surface(y=y, inc=jnp.radians(inc), obl=0, period=1.0)
+    star_interferometry = Harmonix(star)
+        
+    lm_to_n = lambda l,m : l**2+l+m
+    l_max = lambda y: int(jnp.floor(jnp.sqrt(len(y)-1)))
+    lmax = l_max(y_star)
 
-def rearrange_m_inds(l_max):
-    inds = []
-    for m in range(-l_max,l_max+1):
-        for l in range(abs(m), l_max+1):
-            inds.append(lm_to_n(l,m))
-    return jnp.array(inds)
+    def rearrange_m_inds(l_max):
+        inds = []
+        for m in range(-l_max,l_max+1):
+            for l in range(abs(m), l_max+1):
+                inds.append(lm_to_n(l,m))
+        return jnp.array(inds)
 
-radii = jnp.linspace(0.5, 2.0, 5)
-max_baselines = []
-covtrace = []
-total_covtrace = []
+    radii = jnp.linspace(0.5, 2.0, 5)
+    max_baselines = []
+    covtrace = []
+    total_covtrace = []
 
-for radius in radii:
-    mas_to_rad = 1/(1000*60*60*180)*jnp.pi**2
-    max_baselines.append(jnp.max(jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2)))
-    t = jnp.linspace(0,1,ROTATIONAL_PHASES, endpoint=False)
-    noise = 0.01
-    vis_data = visibilities(star_interferometry, radius*mas_to_rad*jnp.array(u.T), radius*mas_to_rad*jnp.array(v.T),t)
-    vis_data += jax.random.normal(jax.random.PRNGKey(1), vis_data.shape)*noise
-    cp_data = closure_phases(star_interferometry, radius*mas_to_rad*jnp.array(u.T), radius*mas_to_rad*jnp.array(v.T),t, cp_inds[0:10,0], cp_inds[0:10,1], cp_inds[0:10,2])
-    cp_data += jax.random.normal(jax.random.PRNGKey(1), cp_data.shape)*noise*360
+    for radius in radii:
+        mas_to_rad = 1/(1000*60*60*180)*jnp.pi**2
+        max_baselines.append(jnp.max(jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2)))
+        t = jnp.linspace(0,1,ROTATIONAL_PHASES, endpoint=False)
+        noise = 0.01
+        vis_data = visibilities(star_interferometry, radius*mas_to_rad*jnp.array(u.T), radius*mas_to_rad*jnp.array(v.T),t)
+        #vis_data += jax.random.normal(jax.random.PRNGKey(1), vis_data.shape)*noise #don't have to actually add in noise for custom loglike
+        cp_data = closure_phases(star_interferometry, radius*mas_to_rad*jnp.array(u.T), radius*mas_to_rad*jnp.array(v.T),t, cp_inds[0:10,0], cp_inds[0:10,1], cp_inds[0:10,2])
+        #cp_data += jax.random.normal(jax.random.PRNGKey(1), cp_data.shape)*noise*360 #don't have to actually add in noise for custom loglike
 
 
-    opt_params = ['data']
-    print(f"Creating the Fisher information matrices for a radius of {radius}...")
+        opt_params = ['data']
+        print(f"Creating the Fisher information matrices for a radius of {radius}...")
 
-    fim_vis = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_visibility, 
-                                data=vis_data, radius=radius, 
-                                u=u.T, v=v.T,t=t, noise=noise)
-    fim_cp = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_cp, data=cp_data, radius=radius, u=u.T, v=v.T,t=t, noise=noise*360.,
-                            index_cps1=cp_inds[0:10,0], index_cps2=cp_inds[0:10,1], index_cps3=cp_inds[0:10,2])
+        fim_vis = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_visibility, 
+                                    data=vis_data, radius=radius, 
+                                    u=u.T, v=v.T,t=t, noise=noise)
+        fim_cp = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_cp, data=cp_data, radius=radius, u=u.T, v=v.T,t=t, noise=noise*360.,
+                                index_cps1=cp_inds[0:10,0], index_cps2=cp_inds[0:10,1], index_cps3=cp_inds[0:10,2])
 
-    t_lc = jnp.linspace(0,10,1000, endpoint=False)
-    light_curve_data = vmap(partial(map_light_curve, star_interferometry.map))(theta=star_interferometry.rotational_phase(t_lc))
-    lc_noise = 1e-4
-    light_curve_data+= jax.random.normal(jax.random.PRNGKey(1), light_curve_data.shape)*lc_noise
-    fim_lc = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_photometry, data=light_curve_data, noise=lc_noise, t=t_lc)
+        t_lc = jnp.linspace(0,10,1000, endpoint=False)
+        light_curve_data = vmap(partial(surface_light_curve, star_interferometry.surface, r=0., x=0., y=0., z=0.))(theta=star_interferometry.rotational_phase(t_lc))
+        lc_noise = 1e-4
+        #light_curve_data+= jax.random.normal(jax.random.PRNGKey(1), light_curve_data.shape)*lc_noise #don't have to actually add in noise for custom loglike
+        fim_lc = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_photometry, data=light_curve_data, noise=lc_noise, t=t_lc)
 
-    covtrace.append(jnp.trace(-jnp.linalg.inv(-(fim_vis+fim_cp))))
-    total_covtrace.append(jnp.trace(-jnp.linalg.inv(-(fim_vis+fim_cp+fim_lc))))
+        covtrace.append(jnp.trace((-(fim_vis+fim_cp)[1:,1:])))
+        total_covtrace.append(jnp.trace((-(fim_vis+fim_cp+fim_lc)[1:,1:])))
 
-def ud(x):
-    return 2*(jax.scipy.special.bessel_jn(x,v=1,n_iter=30)[1]/x)
+    def ud(x):
+        return 2*(jax.scipy.special.bessel_jn(x,v=1,n_iter=30)[1]/x)
 
-max_baselines = jnp.array(max_baselines)
-covtrace = jnp.array(covtrace)
-total_covtrace = jnp.array(total_covtrace)
+    max_baselines = jnp.array(max_baselines)
+    covtrace = jnp.array(covtrace)
+    total_covtrace = jnp.array(total_covtrace)
 
-fig = plt.figure(figsize=(10,5))
-ax = fig.add_subplot(111)
-x = jnp.linspace(0, jnp.max(max_baselines), 500)
-ax.plot(x/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.abs(ud(x)), label="Uniform disk (UD)", color='k')
-ax.set_ylabel('Uniform disk visibility amplitude')
-ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
-for baseline, tr, total_tr in zip(max_baselines, covtrace, total_covtrace):
-    print(baseline, tr, total_tr)
-ax2.plot(max_baselines/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.sqrt(jnp.abs(covtrace)), label="Visibility + closure phase", color='b', marker='o')
-ax2.plot(max_baselines/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.sqrt(jnp.abs(total_covtrace)), label="Visibility + closure phase + light curve", color='r', marker='o')
-ax2.set_ylabel('log covariance trace')
-ax.set_xlabel('Angular diameter (mas) at CHARA max baseline')
-ax2.set_yscale('log')
-ax2.legend(loc='upper right')
-fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}.pdf")
+    fig = plt.figure(figsize=(10,5))
+    ax = fig.add_subplot(111)
+    x = jnp.linspace(0, jnp.max(max_baselines), 500)
+    ax.plot(x/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.abs(ud(x)), label="Uniform disk (UD)", color='k')
+    ax.set_ylabel('UD visibility amplitude at CHARA max baseline')
+    ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
+    for baseline, tr, total_tr in zip(max_baselines, covtrace, total_covtrace):
+        print(baseline, tr, total_tr)
+    ax2.plot(max_baselines/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.sqrt(jnp.abs(covtrace)), label="Visibility + closure phase", color='b', marker='o')
+    ax2.plot(max_baselines/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.sqrt(jnp.abs(total_covtrace)), label="Visibility + closure phase + light curve", color='r', marker='o')
+    ax2.set_ylabel('Covariance trace')
+    ax.set_xlabel('Angular diameter (mas)')
+    ax2.set_yscale('log')
+    ax2.legend(loc='upper right')
+    fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim.pdf")
