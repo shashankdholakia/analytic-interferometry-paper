@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from harmonix.solution import j_to_nm, nm_to_j, transform_to_zernike, zernike_FT, jmax, A, CHSH_FT
-from jaxoplanet.experimental.starry import Map, Ylm, show_map
+from jaxoplanet.starry import Map, Ylm, show_map
 import matplotlib.font_manager
 
 from matplotlib import colors
