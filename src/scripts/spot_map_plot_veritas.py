@@ -27,9 +27,9 @@ plt.rcParams.update({'font.size': 12})
 load = Loader(paths.data)
 
 
-HOUR_ANGLES = 5
+HOUR_ANGLES = 50
 #using SPICA lowres
-WAVS = 50
+WAVS = 1
 
 # Assume you have a Surface object with an intensity method
 # For example:
@@ -48,6 +48,19 @@ lon_grid, lat_grid = jnp.meshgrid(lon, lat)
 # 2. Compute intensity at each (lat, lon)
 intensity = star.intensity(lat_grid, lon_grid)[::-1, ::-1]
 
+veritas_tels = np.array([[140,-10],[50,-50],[40,60],[-30,10]])
+station_x = veritas_tels[:,0]
+station_y = veritas_tels[:,1]
+
+baseline_inds, baselines = makebaselines(np.vstack([station_x, station_y]).T)
+
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("Veritas telescope positions")
+plt.grid(True, linestyle='--', linewidth=0.5, color='k', alpha=0.5)
+plt.scatter(station_x, station_y)
+plt.gca().set_aspect('equal', adjustable='box')
+plt.savefig(paths.figures / "veritas_tels.pdf", dpi=300)
 
 # ---------------------
 # Set up the plot layout
@@ -69,7 +82,6 @@ ax_ortho = [
 # Bottom panel for data
 ax_data = [plt.subplot2grid((45, 8), (18, 0), rowspan=12, colspan=8)]
 
-ax_data.append(plt.subplot2grid((45, 8), (32, 0), rowspan=12, colspan=8))
 
 # ---------------------
 # Plot the Mollweide map
@@ -89,31 +101,12 @@ times = jnp.linspace(0, 1, 8)  # Example times for the orthographic views
 for n in range(8):
     show_surface(star, ax=ax_ortho[n], cmap='plasma', theta=star.rotational_phase(times[n]))
 
-chara_tels = np.array(
-    [[0, 0],
-    [330.66,22.28],
-    [-313.53,253.39],
-    [302.33,25.7],
-    [-221.82,241.27],
-    [-65.88,236.6]])
-#for some reason the file is rotated by 90 degrees
-theta = 0
-chara_tels[:,1] = chara_tels[:,1] + theta
-station_x = chara_tels[:,0]*np.cos(np.radians(chara_tels[:,1]))
-station_y = chara_tels[:,0]*np.sin(np.radians(chara_tels[:,1]))
-station_x-=np.abs(station_x.min())
-station_y+=np.abs(station_y.min())
 
-cp_inds, cp_uvs = maketriples_all(np.vstack([station_x, station_y]).T)[0:10]
-print("cp_inds shape: " + str(cp_inds.shape))
-baseline_inds, baselines = makebaselines(np.vstack([station_x, station_y]).T)
-
-print("cp_uvs shape: " + str(cp_uvs.shape))
 
 print("Loading earth data...")
 ts = load.timescale()
     
-t =ts.utc(2023, 3, 23, np.linspace(8,12,HOUR_ANGLES))
+t =ts.utc(2023, 12, 23, np.linspace(4,12,HOUR_ANGLES))
 planets = load('de421.bsp')
 earth = planets['earth']
 
@@ -121,13 +114,12 @@ print("Loading Hipparcos data on Alioth...")
 with load.open(hipparcos.URL) as f:
     df = hipparcos.load_dataframe(f)
 
-latitude = 34.2249
-chara = earth + wgs84.latlon(latitude * N, 118.0564 * W, elevation_m=1740)
+latitude = 31.66
+veritas = earth + wgs84.latlon(latitude * N, 110.95 * W, elevation_m=1270)
 alioth = Star.from_dataframe(df.loc[62956])
-position = chara.at(t).observe(alioth).apparent()
+position = veritas.at(t).observe(alioth).apparent()
 
 ha, dec, distance = position.hadec()
-
 #matrix to project a star's changing hour angle and declination onto the baselines
 #to create uv tracks
 proj_mat = []
@@ -136,9 +128,7 @@ for h, d in zip(ha.radians, dec.radians):
                   [-np.sin(d)*np.cos(h), np.sin(d)*np.sin(h), np.cos(d)],
                   [np.cos(d)*np.cos(h), -np.cos(d)*np.sin(h), np.sin(d)]]))
 proj_mat = np.array(proj_mat)
-proj_mat.shape
 
-#project the baselines onto the uv plane
 #project the baselines onto the uv plane
 enu = np.insert(baselines, 2, 0, axis=1)
 # Latitude in radians
@@ -153,8 +143,9 @@ T = np.array([
 
 # Transform to (x, y, z)
 xyz = enu @ T.T
-wav = jnp.linspace(0.65*1e-6, 0.95*1e-6,WAVS)
-uv = (proj_mat@xyz.T)[:,0:2]
+wav = np.array([0.416*1e-6])
+uv = (proj_mat @ xyz.T[None, :, :])[:,0:2, :]
+
 #really complicated logic to first
 #create a new axis for each wavelength
 #then repeat the uv tracks for each wavelength
@@ -175,58 +166,23 @@ print("v shape: " + str(v.shape))
 colors = plt.cm.tab20(np.linspace(0, 1, u.shape[1]))
 for i in range(u.shape[1]):
     ax[1].scatter(u[:,i],v[:,i],color=colors[i],s=2.)
+    ax[1].scatter(-u[:,i],-v[:,i],color=colors[i],s=2.)
 ax[1].set_xlabel("U (baseline/$\lambda$)")
 ax[1].set_ylabel("V (baseline/$\lambda$)")
 
 radius = 1.47/2.
 star_interferometry = Harmonix(star, radius)
 vis_data = visibilities(star_interferometry, jnp.array(u.T), jnp.array(v.T), times)
-cp_data = closure_phases(star_interferometry, jnp.array(u.T), jnp.array(v.T),times, cp_inds[0:10,0], cp_inds[0:10,1], cp_inds[0:10,2])
+
 print("Visibility data shape: " + str(vis_data.shape))
 for n in range(8):
     for i in range(u.shape[1]):
-        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2), vis_data[n,i,:], alpha=0.5,color=colors[i], lw=0.5, rasterized=True)
+        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2), vis_data[n,i,:], alpha=1.0,color=colors[i], lw=0.5, rasterized=True)
     
-    #get the maximum baseline for each closure phase
-    cp_x_axis = []
-    cp_x_color = []
-    for i in range(10):
-        #each station in the closure phase triple
-        b1 = cp_inds[i,0]
-        b2 = cp_inds[i,1]
-        b3 = cp_inds[i,2]
-        #each baseline in the closure phase triple, and its respectice index in u, v
-        matches_1 = np.all(baseline_inds == [b1,b2], axis=1)
-        ind1 = np.where(matches_1)[0]
-        matches_2 = np.all(baseline_inds == [b2,b3], axis=1)
-        ind2 = np.where(matches_2)[0]
-        matches_3 = np.all(baseline_inds == [b1,b3], axis=1)
-        ind3 = np.where(matches_3)[0]
-        #and the index of the closure phase triple with the maximum baseline
-        #the same index is repeated n_wavs times, so just take the first one
-        max_baseline_ind = jnp.argmax(
-            jnp.array([jnp.sqrt((jnp.array(u.T))**2+(jnp.array(v.T))**2)[ind1],
-                       jnp.sqrt((jnp.array(u.T))**2+(jnp.array(v.T))**2)[ind2],
-                       jnp.sqrt((jnp.array(u.T))**2+(jnp.array(v.T))**2)[ind3]]), axis=0)[0,0]
-        if max_baseline_ind == 0:
-            cp_x_axis.append(jnp.sqrt((jnp.array(u.T))**2+(jnp.array(v.T))**2)[ind1])
-            cp_x_color.append(ind1)
-        elif max_baseline_ind == 1:
-            cp_x_axis.append(jnp.sqrt((jnp.array(u.T))**2+(jnp.array(v.T))**2)[ind2])
-            cp_x_color.append(ind2)
-        elif max_baseline_ind == 2:
-            cp_x_axis.append(jnp.sqrt((jnp.array(u.T))**2+(jnp.array(v.T))**2)[ind3])
-            cp_x_color.append(ind3)
-        
-    cp_x_color = np.array(cp_x_color)
-    for i in range(len(cp_x_color)):
-        ax_data[1].scatter(cp_x_axis[i], cp_data[n,i,:], color=colors[cp_x_color[i]], rasterized=True, s=1)
 
 ax_data[0].set_xlabel('Spatial Frequency (lambdas)')
 ax_data[0].set_xlim(left=0)
+ax_data[0].set_ylim(bottom=0, top=1.0)
 ax_data[0].set_ylabel('Visibility Amplitude')
-ax_data[1].set_xlabel("Spatial frequency at max baseline (lambdas)")
-ax_data[1].set_xlim(left=0)
-ax_data[1].set_ylabel("Closure Phase (degrees)")
 
-plt.savefig(paths.figures / 'spot_map_chara.pdf', bbox_inches="tight", dpi=300)
+plt.savefig(paths.figures / 'spot_map_veritas.pdf', bbox_inches="tight", dpi=300)

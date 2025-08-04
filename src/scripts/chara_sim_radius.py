@@ -11,6 +11,7 @@ from jaxoplanet.starry.light_curves import surface_light_curve
 
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import paths
 from functools import partial
 
@@ -46,7 +47,7 @@ def loglike_visibility(model, data, noise, u, v, t):
     vis = visibilities(model, u, v, t)
     return -0.5 * jnp.sum((vis - data) ** 2 / noise ** 2)
 
-def loglike_cp(model, data, noise, radius, u, v, t, index_cps1, index_cps2, index_cps3):
+def loglike_cp(model, data, noise, u, v, t, index_cps1, index_cps2, index_cps3):
     """Log likelihood for visibility amplitude
 
     Args:
@@ -102,7 +103,8 @@ print("Loading Hipparcos data on Alioth...")
 with load.open(hipparcos.URL) as f:
     df = hipparcos.load_dataframe(f)
 
-chara = earth + wgs84.latlon(34.2249 * N, 118.0564 * W, elevation_m=1740)
+latitude = 34.2249
+chara = earth + wgs84.latlon(latitude * N, 118.0564 * W, elevation_m=1740)
 alioth = Star.from_dataframe(df.loc[62956])
 position = chara.at(t).observe(alioth).apparent()
 
@@ -118,8 +120,19 @@ for h, d in zip(ha.radians, dec.radians):
 proj_mat = np.array(proj_mat)
 proj_mat.shape
 
-#project the baselines onto the uv plane
-xyz = np.insert(baselines, 2, 0, axis=1)
+enu = np.insert(baselines, 2, 0, axis=1)
+# Latitude in radians
+latitude = np.deg2rad(latitude)  # example: 34 degrees
+
+# Define the transformation matrix
+T = np.array([
+    [0, -np.sin(latitude), np.cos(latitude)],
+    [1, 0, 0],
+    [0, np.cos(latitude), np.sin(latitude)]
+])
+
+# Transform to (x, y, z)
+xyz = enu @ T.T
 wav = jnp.linspace(0.65*1e-6, 0.95*1e-6,WAVS)
 uv = (proj_mat@xyz.T)[:,0:2]
 #really complicated logic to first
@@ -134,9 +147,9 @@ v = np.concatenate(uv_by_wav[:,:,1],axis=0)
 wavs = wav.repeat(HOUR_ANGLES,axis=0).repeat(u.shape[1], axis=0)
 
 print("Loading star surface...")
-y_star = np.load(paths.data / "spot_map_hd.npy")
+y_star = np.load(paths.data / "SPOT_map_highres.npy")
 y = Ylm.from_dense(y_star)
-incs = [0., 30., 45., 60., 75., 90.]
+incs = [60.]
 for inc in incs:
     star = Surface(y=y, inc=jnp.radians(inc), obl=0., period=1.0, u=jnp.array([0.1,0.1]))
     lm_to_n = lambda l,m : l**2+l+m
@@ -150,12 +163,14 @@ for inc in incs:
                 inds.append(lm_to_n(l,m))
         return jnp.array(inds)
 
-    radii = jnp.linspace(0.5, 2.0, 5)
+    radii = jnp.linspace(0.1, 2.0, 25)
     max_baselines = []
-    covtrace = []
-    total_covtrace = []
 
-    for radius in radii:
+
+    det = np.zeros((radii.shape[0], lmax + 1))
+    det_total = np.zeros((radii.shape[0], lmax + 1))
+
+    for i, radius in enumerate(radii):
         mas_to_rad = 1/(1000*60*60*180)*jnp.pi**2
         star_interferometry = Harmonix(star, radius)
         max_baselines.append(jnp.max(jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2)))
@@ -165,9 +180,9 @@ for inc in incs:
         #vis_data += jax.random.normal(jax.random.PRNGKey(1), vis_data.shape)*noise #don't have to actually add in noise for custom loglike
         cp_data = closure_phases(star_interferometry, jnp.array(u.T), jnp.array(v.T),t, cp_inds[0:10,0], cp_inds[0:10,1], cp_inds[0:10,2])
         #cp_data += jax.random.normal(jax.random.PRNGKey(1), cp_data.shape)*noise*360 #don't have to actually add in noise for custom loglike
+        
 
-
-        opt_params = ["radius", "data","u"]
+        opt_params = ["data","u"]
         print(f"Creating the Fisher information matrices for a radius of {radius}...")
 
         fim_vis = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_visibility, 
@@ -181,28 +196,80 @@ for inc in incs:
         lc_noise = 1e-4
         #light_curve_data+= jax.random.normal(jax.random.PRNGKey(1), light_curve_data.shape)*lc_noise #don't have to actually add in noise for custom loglike
         fim_lc = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_photometry, data=light_curve_data, noise=lc_noise, t=t_lc)
-        covtrace.append(jnp.trace(-(fim_vis+fim_cp)[1:,1:]))
-        total_covtrace.append(jnp.trace(-(fim_vis+fim_cp+fim_lc)[1:,1:]))
+        for l in range(lmax + 1):
+            indices = [lm_to_n(l, m) for m in range(-l, l + 1)]
+            #check this logic carefully
+            block_vis = fim_vis[np.ix_(indices, indices)]
+            block_cp = fim_cp[np.ix_(indices, indices)]
+            
+            _, det[i, l] = np.linalg.slogdet(block_vis + block_cp)
+            block_lc = fim_lc[np.ix_(indices, indices)]
+            _, det_total[i, l] = np.linalg.slogdet(block_vis + block_cp+block_lc)
 
     def ud(x):
         return 2*(jax.scipy.special.bessel_jn(x,v=1,n_iter=30)[1]/x)
 
     max_baselines = jnp.array(max_baselines)
-    covtrace = jnp.array(covtrace)
-    total_covtrace = jnp.array(total_covtrace)
+
 
     fig = plt.figure(figsize=(10,5))
+    fig.subplots_adjust(right=0.85)
     ax = fig.add_subplot(111)
     x = jnp.linspace(0, jnp.max(max_baselines), 500)
     ax.plot(x/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.abs(ud(x)), label="Uniform disk (UD)", color='k')
     ax.set_ylabel('UD visibility amplitude at CHARA max baseline')
     ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
-    for baseline, tr, total_tr in zip(max_baselines, covtrace, total_covtrace):
-        print(baseline, tr, total_tr)
-    ax2.plot(max_baselines/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.sqrt(jnp.abs(covtrace)), label="Visibility + closure phase", color='b', marker='o')
-    ax2.plot(max_baselines/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.sqrt(jnp.abs(total_covtrace)), label="Visibility + closure phase + light curve", color='r', marker='o')
-    ax2.set_ylabel('Covariance trace')
+    for baseline, d_opt, d_total_opt in zip(max_baselines, det, det_total):
+        print(baseline, d_opt, d_total_opt)
+    l_vals = np.arange(lmax + 1)
+    cmap = plt.cm.plasma
+    boundaries = np.arange(-0.5, lmax + 1.5, 1)  # from -0.5 to lmax+0.5 for integer bins
+    norm = mcolors.BoundaryNorm(boundaries, cmap.N)
+    xvals = max_baselines / jnp.max(jnp.sqrt(u.T**2 + v.T**2) * mas_to_rad)
+
+    for l in range(lmax + 1):
+        color = cmap(norm(l))  # Get color from colormap via norm
+        ax2.plot(xvals, det[:, l], color=color, label=None)
+        #ax2.plot(xvals, det_total[:, l], marker='^', color=color, label=None)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])  # Only needed for older matplotlib versions
+    cbar = plt.colorbar(sm, ax=ax2, ticks=l_vals, boundaries=boundaries, pad=0.1, fraction=0.046)
+    cbar.set_label("Spherical harmonic degree $l$")
+    cbar.ax.set_yticklabels([str(l) for l in l_vals])  # optional, for integer ticks
+    cbar.ax.minorticks_off()
+    ax2.set_ylabel('Fisher information $\ln{\mathrm{det}}$')
     ax.set_xlabel('Angular diameter (mas)')
-    ax2.set_yscale('log')
-    ax2.legend(loc='upper right')
+    #ax2.set_yscale('log')
+    #ax2.legend(loc='upper right')
     fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim_u.pdf")
+    
+    fig = plt.figure(figsize=(10,5))
+    fig.subplots_adjust(right=0.85)
+    ax = fig.add_subplot(111)
+    x = jnp.linspace(0, jnp.max(max_baselines), 500)
+    ax.plot(x/jnp.max(jnp.sqrt(u.T**2+v.T**2)*mas_to_rad), jnp.abs(ud(x)), label="Uniform disk (UD)", color='k')
+    ax.set_ylabel('UD visibility amplitude at CHARA max baseline')
+    ax2 = ax.twinx()  # instantiate a second axes that shares the same x-axis
+    for baseline, d_opt, d_total_opt in zip(max_baselines, det, det_total):
+        print(baseline, d_opt, d_total_opt)
+    l_vals = np.arange(lmax + 1)
+    cmap = plt.cm.plasma
+    boundaries = np.arange(-0.5, lmax + 1.5, 1)  # from -0.5 to lmax+0.5 for integer bins
+    norm = mcolors.BoundaryNorm(boundaries, cmap.N)
+    xvals = max_baselines / jnp.max(jnp.sqrt(u.T**2 + v.T**2) * mas_to_rad)
+
+    for l in range(lmax + 1):
+        color = cmap(norm(l))  # Get color from colormap via norm
+        ax2.plot(xvals, det[:, l], marker='o', color=color, label=None)
+        ax2.plot(xvals, det_total[:, l], marker='^', color=color, label=None)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])  # Only needed for older matplotlib versions
+    cbar = plt.colorbar(sm, ax=ax2, ticks=l_vals, boundaries=boundaries, pad=0.1, fraction=0.046)
+    cbar.set_label("Spherical harmonic degree $l$")
+    cbar.ax.set_yticklabels([str(l) for l in l_vals])  # optional, for integer ticks
+    cbar.ax.minorticks_off()
+    ax2.set_ylabel('Fisher information $\ln{\mathrm{det}}$')
+    ax.set_xlabel('Angular diameter (mas)')
+    #ax2.set_yscale('log')
+    #ax2.legend(loc='upper right')
+    fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim_u_total.pdf")

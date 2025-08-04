@@ -66,8 +66,8 @@ def loglike_cp(model, data, noise, u, v, t, index_cps1, index_cps2, index_cps3):
 
 def loglike_photometry(model, data, noise, t):
     theta = model.rotational_phase(t)
-    y = Ylm.from_dense(model.data)
-    star = Surface(y=y, inc=star_interferometry.surface.inc, obl=star_interferometry.surface.obl, period=star_interferometry.surface.period, u=star_interferometry.surface.u)
+    y = Ylm.from_dense(jnp.concatenate([jnp.array([1.0]), model.data]))
+    star = Surface(y=y, inc=model.surface.inc, obl=model.surface.obl, period=model.surface.period, u=model.surface.u)
     light_curve = vmap(partial(surface_light_curve, star, r=0., x=1., y=1., z=1.))(theta=theta)
     return -0.5 * jnp.sum((light_curve - data) ** 2 / noise ** 2)
 
@@ -185,12 +185,12 @@ for i in np.arange(ROTATIONAL_PHASES):
     plt.ylabel("closure phase")
 
 
-opt_params = ['data']
+opt_params = ['data','u']
 print("Creating the Fisher information matrices...")
 fim_vis = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_visibility, 
                             data=vis_data, 
                             u=u.T, v=v.T,t=t, noise=noise)
-fim_cp = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_cp, data=cp_data, u=u.T, v=v.T,t=t, noise=noise*360.,
+fim_cp = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_cp, data=cp_data, u=u.T, v=v.T,t=t, noise=noise*180/np.pi,
                            index_cps1=cp_inds[0:10,0], index_cps2=cp_inds[0:10,1], index_cps3=cp_inds[0:10,2])
 
 lm_to_n = lambda l,m : l**2+l+m
@@ -208,7 +208,7 @@ print("Plotting the Fisher information matrices...")
 fig = plt.figure()
 plt.imshow(fim_vis,vmin=-jnp.max(fim_vis),vmax=jnp.max(fim_vis),  cmap='RdBu_r')
 plt.colorbar()
-tick_labels = jnp.arange(0,lmax+1)
+tick_labels = jnp.arange(1,lmax+1)
 tick_positions = [nmax(i)-1 for i in tick_labels]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
@@ -218,7 +218,7 @@ plt.savefig(paths.figures / f'FIM_vis.pdf', bbox_inches="tight")
 fig = plt.figure()
 plt.imshow(fim_cp,vmin=-jnp.max(fim_cp),vmax=jnp.max(fim_cp),  cmap='RdBu_r')
 plt.colorbar()
-tick_labels = jnp.arange(0,lmax+1)
+tick_labels = jnp.arange(1,lmax+1)
 tick_positions = [nmax(i)-1 for i in tick_labels]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
@@ -228,7 +228,7 @@ plt.savefig(paths.figures / f'FIM_cp.pdf', bbox_inches="tight")
 fig = plt.figure()
 plt.imshow(fim_cp+fim_vis,vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r')
 plt.colorbar()
-tick_labels = jnp.arange(0,lmax+1)
+tick_labels = jnp.arange(1,lmax+1)
 tick_positions = [nmax(i)-1 for i in tick_labels]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
@@ -238,7 +238,7 @@ print("diagonal elements of the FIM for visibilities and closure phases:" + str(
 
 print("Plotting the covariance matrices...")
 fig = plt.figure()
-cov_vis = -jnp.linalg.inv(-(fim_vis)[1:,1:])
+cov_vis = -jnp.linalg.inv(-(fim_vis))
 plt.imshow(cov_vis, cmap='RdBu_r',vmin=-jnp.max(cov_vis),vmax=jnp.max(cov_vis))
 plt.colorbar()
 tick_labels = jnp.arange(1,lmax+1)
@@ -249,7 +249,7 @@ plt.grid(True,linestyle=':',color='black',alpha=1)
 plt.savefig(paths.figures / f'cov_vis.pdf', bbox_inches="tight")
 
 fig = plt.figure()
-cov_cp = -jnp.linalg.inv(-(fim_cp)[1:,1:])
+cov_cp = -jnp.linalg.inv(-(fim_cp))
 plt.imshow(cov_cp, cmap='RdBu_r',vmin=-jnp.max(cov_cp),vmax=jnp.max(cov_cp))
 plt.colorbar()
 tick_labels = jnp.arange(1,lmax+1)
@@ -260,7 +260,7 @@ plt.grid(True,linestyle=':',color='black',alpha=1)
 plt.savefig(paths.figures / f'cov_cp.pdf', bbox_inches="tight")
 
 fig = plt.figure()
-cov = -jnp.linalg.inv(-(fim_cp+fim_vis)[1:,1:])
+cov = -jnp.linalg.inv(-(fim_cp+fim_vis))
 plt.imshow(cov, cmap='RdBu_r',vmin=-jnp.max(cov),vmax=jnp.max(cov))
 plt.colorbar()
 tick_labels = jnp.arange(1,lmax+1)
@@ -304,7 +304,7 @@ plt.grid(True,linestyle=':',color='black',alpha=1)
 plt.savefig(paths.figures / f'FIM_total.pdf', bbox_inches="tight")
 
 fig = plt.figure()
-total_cov = jnp.linalg.inv(total_fim[1:,1:])
+total_cov = jnp.linalg.inv(total_fim)
 plt.imshow(total_cov, cmap='RdBu_r',vmin=-jnp.max(total_cov),vmax=jnp.max(total_cov))
 plt.colorbar()
 tick_labels = jnp.arange(1,lmax+1)
