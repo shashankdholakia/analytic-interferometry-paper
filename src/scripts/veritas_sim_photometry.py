@@ -26,7 +26,7 @@ from skyfield.api import N,S,E,W, wgs84
 
 load = Loader(paths.data)
 
-ROTATIONAL_PHASES = 6
+ROTATIONAL_PHASES = 8
 UV_MAX = 8
 
 HOUR_ANGLES = 5

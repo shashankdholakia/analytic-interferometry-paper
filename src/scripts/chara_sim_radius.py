@@ -163,7 +163,7 @@ for inc in incs:
                 inds.append(lm_to_n(l,m))
         return jnp.array(inds)
 
-    radii = jnp.linspace(0.1, 2.0, 25)
+    radii = jnp.linspace(0.01, 2.0, 25)
     max_baselines = []
 
 
@@ -229,7 +229,7 @@ for inc in incs:
 
     for l in range(lmax + 1):
         color = cmap(norm(l))  # Get color from colormap via norm
-        ax2.plot(xvals, det[:, l], color=color, label=None)
+        ax2.plot(xvals, det[:, l], color=color, label=None, lw=2)
         #ax2.plot(xvals, det_total[:, l], marker='^', color=color, label=None)
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])  # Only needed for older matplotlib versions
@@ -239,9 +239,10 @@ for inc in incs:
     cbar.ax.minorticks_off()
     ax2.set_ylabel('Fisher information $\ln{\mathrm{det}}$')
     ax.set_xlabel('Angular diameter (mas)')
+    ax.set_xmargin(0)
     #ax2.set_yscale('log')
     #ax2.legend(loc='upper right')
-    fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim_u.pdf")
+    fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim_u.pdf", bbox_inches='tight', dpi=300)
     
     fig = plt.figure(figsize=(10,5))
     fig.subplots_adjust(right=0.85)
@@ -270,6 +271,7 @@ for inc in incs:
     cbar.ax.minorticks_off()
     ax2.set_ylabel('Fisher information $\ln{\mathrm{det}}$')
     ax.set_xlabel('Angular diameter (mas)')
+    ax.set_xmargin(0)
     #ax2.set_yscale('log')
     #ax2.legend(loc='upper right')
-    fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim_u_total.pdf")
+    fig.savefig(paths.figures / f"chara_sim_radius_sqrt_inc{inc}_fim_u_total.pdf", bbox_inches='tight', dpi=300)

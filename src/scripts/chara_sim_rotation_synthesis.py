@@ -69,12 +69,6 @@ def loglike_cp(model, data, noise, u, v, t, index_cps1, index_cps2, index_cps3):
     cp = closure_phases(model, u, v, t, index_cps1, index_cps2, index_cps3)
     return -0.5 * jnp.sum((cp - data) ** 2 / noise ** 2)
 
-def loglike_photometry(model, data, noise, t):
-    theta = model.rotational_phase(t)
-    y = Ylm.from_dense(jnp.concatenate([jnp.array([1.0]), model.data]))
-    star = Surface(y=y, inc=model.surface.inc, obl=model.surface.obl, period=model.surface.period, u=model.surface.u)
-    light_curve = vmap(partial(surface_light_curve, star, r=0., x=1., y=1., z=1.))(theta=theta)
-    return -0.5 * jnp.sum((light_curve - data) ** 2 / noise ** 2)
 
 nmax = lambda l_max: l_max**2 + 2 * l_max + 1
 
@@ -156,12 +150,19 @@ fig1.savefig(paths.figures / 'alioth_uv_coverage.pdf', bbox_inches="tight", dpi=
 print("Loading star map...")
 y_star = np.load(paths.data / "SPOT_map_highres.npy")
 y = Ylm.from_dense(y_star)
-star = Surface(y=y, inc=jnp.radians(60.), obl=0, period=1.0, u=jnp.array([0.1, 0.1]))
+PERIOD = 5.1 #days
+star = Surface(y=y, inc=jnp.radians(60.), obl=0, period=PERIOD, u=jnp.array([0.1, 0.1]))
 radius = 1.47/2.
 star_interferometry = Harmonix(star, radius)
 
 
-t = jnp.linspace(0,1,ROTATIONAL_PHASES, endpoint=False)
+t = jnp.linspace(0,PERIOD,ROTATIONAL_PHASES, endpoint=False)
+window_size = 4/24 # how many hours per night
+sub_offsets = np.linspace(-window_size/2, window_size/2, HOUR_ANGLES)
+sub_times = jnp.array([time + sub_offsets for time in t]).flatten()
+print(sub_times)
+print(sub_times)
+
 print(u.shape, v.shape)
 noise = 0.01
 vis_data = visibilities(star_interferometry, jnp.array(u.T), jnp.array(v.T),t)
@@ -169,25 +170,6 @@ vis_data = visibilities(star_interferometry, jnp.array(u.T), jnp.array(v.T),t)
 cp_data = closure_phases(star_interferometry, jnp.array(u.T), jnp.array(v.T),t, cp_inds[0:10,0], cp_inds[0:10,1], cp_inds[0:10,2])
 #cp_data += jax.random.normal(jax.random.PRNGKey(0), cp_data.shape)*noise*360 #don't have to add noise for custom loglike for analytic FIM
 
-
-print("Plotting visibilities and closure phases of the simulated CHARA observations...")
-for i in np.arange(ROTATIONAL_PHASES):
-    fig = plt.figure()
-    mas_to_rad = 1/(1000*60*60*180)*jnp.pi**2
-
-    plt.scatter(jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2), vis_data[i,:,:], s=1, c='k');
-    plt.ylim([0,1])
-    plt.xlabel("spatial frequency")
-    plt.ylabel("visibility amplitude")
-    plt.savefig(paths.figures / f'vis_data_{i}.pdf', bbox_inches="tight", dpi=300)
-    
-    cp_x_axis = jnp.max(
-    jnp.array([jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2)[cp_inds[0:10,0]],
-    jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2)[cp_inds[0:10,1]],
-    jnp.sqrt((radius*mas_to_rad*jnp.array(u.T))**2+(radius*mas_to_rad*jnp.array(v.T))**2)[cp_inds[0:10,2]]]), axis=0)
-    plt.scatter(cp_x_axis, cp_data[i,:,:], s=1, c='k');
-    plt.xlabel("spatial frequency")
-    plt.ylabel("closure phase")
 
 
 opt_params = ['data','u']
@@ -220,7 +202,7 @@ tick_positions = [nmax(i) for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'FIM_vis.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'no_rotation_synthesis/FIM_vis.pdf', bbox_inches="tight")
 
 fig = plt.figure()
 plt.imshow(fim_cp[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_cp),vmax=jnp.max(fim_cp),  cmap='RdBu_r', origin='lower')
@@ -230,7 +212,7 @@ tick_positions = [nmax(i) for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'FIM_cp.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'no_rotation_synthesis/FIM_cp.pdf', bbox_inches="tight")
 
 fig = plt.figure()
 plt.imshow((fim_cp+fim_vis)[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r', origin='lower')
@@ -242,61 +224,121 @@ tick_positions = [nmax(i) for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'FIM_vis_cp.pdf', bbox_inches="tight")
-print("diagonal elements of the FIM for visibilities and closure phases:" + str(jnp.diag(fim_vis+fim_cp)))
+plt.savefig(paths.figures / f'no_rotation_synthesis/FIM_vis_cp.pdf', bbox_inches="tight")
+
+fig = plt.figure(figsize=(10, 10))
+plt.imshow((fim_cp+fim_vis),vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r', origin='lower')
+#plt.imshow(fim_cp+fim_vis, cmap='RdBu_r', norm=colors.SymLogNorm(linthresh=1e4, linscale=1.0,
+#                                              vmin=-10*jnp.max(fim_cp+fim_vis),vmax=10*jnp.max(fim_cp+fim_vis), base=10))
+plt.colorbar()
+tick_labels = jnp.arange(1,lmax+1)
+tick_positions = [nmax(i) for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'no_rotation_synthesis/FIM_vis_cp_full.pdf', bbox_inches="tight")
+
+print("FIM determinant (no rotation synthesis): " + str(jnp.linalg.slogdet(fim_cp+fim_vis)))
 
 print("Plotting the covariance matrices...")
 fig = plt.figure()
-cov_vis = -jnp.linalg.inv(-(fim_vis)[0:cutoff_n,0:cutoff_n])
-plt.imshow(cov_vis, cmap='RdBu_r',vmin=-jnp.max(cov_vis),vmax=jnp.max(cov_vis), origin='lower')
+cov_vis = -jnp.linalg.inv(-(fim_vis))
+plt.imshow(cov_vis[0:cutoff_n,0:cutoff_n], cmap='RdBu_r',vmin=-jnp.max(cov_vis),vmax=jnp.max(cov_vis), origin='lower')
 plt.colorbar()
 tick_labels = jnp.arange(1,CUTOFF+1)
 tick_positions = [nmax(i)-1 for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'cov_vis.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'no_rotation_synthesis/cov_vis.pdf', bbox_inches="tight")
 
 fig = plt.figure()
-cov_cp = -jnp.linalg.inv(-(fim_cp)[0:cutoff_n,0:cutoff_n])
-plt.imshow(cov_cp, cmap='RdBu_r',vmin=-jnp.max(cov_cp),vmax=jnp.max(cov_cp), origin='lower')
+cov_cp = -jnp.linalg.inv(-(fim_cp))
+plt.imshow(cov_cp[0:cutoff_n,0:cutoff_n], cmap='RdBu_r',vmin=-jnp.max(cov_cp),vmax=jnp.max(cov_cp), origin='lower')
 plt.colorbar()
 tick_labels = jnp.arange(1,CUTOFF+1)
 tick_positions = [nmax(i)-1 for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'cov_cp.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'no_rotation_synthesis/cov_cp.pdf', bbox_inches="tight")
 
 fig = plt.figure()
-cov = -jnp.linalg.inv(-(fim_cp+fim_vis)[0:cutoff_n,0:cutoff_n])
+cov = -jnp.linalg.inv(-(fim_cp+fim_vis))
+plt.imshow(cov[0:cutoff_n,0:cutoff_n], cmap='RdBu_r',vmin=-jnp.max(cov),vmax=jnp.max(cov), origin='lower')
+plt.colorbar()
+tick_labels = jnp.arange(1,CUTOFF+1)
+tick_positions = [nmax(i)-1 for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'no_rotation_synthesis/cov_vis_cp.pdf', bbox_inches="tight")
+
+fig = plt.figure(figsize=(10, 10))
+cov = -jnp.linalg.inv(-(fim_cp+fim_vis))
 plt.imshow(cov, cmap='RdBu_r',vmin=-jnp.max(cov),vmax=jnp.max(cov), origin='lower')
 plt.colorbar()
-tick_labels = jnp.arange(1,CUTOFF+1)
+tick_labels = jnp.arange(1,lmax+1)
 tick_positions = [nmax(i)-1 for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'cov_vis_cp.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'no_rotation_synthesis/cov_vis_cp_full.pdf', bbox_inches="tight")
+
+print("Covariance trace (no rotation synthesis): " + str(jnp.linalg.trace(cov)))
+
+print(u.shape, v.shape)
+noise = 0.01*jnp.sqrt(HOUR_ANGLES)
+
+vis_data = visibilities(star_interferometry, jnp.array(u.T), jnp.array(v.T),sub_times)
+cp_data = closure_phases(star_interferometry, jnp.array(u.T), jnp.array(v.T),sub_times, cp_inds[0:10,0], cp_inds[0:10,1], cp_inds[0:10,2])
 
 
-fig = plt.figure(figsize=(10, 6))
-t_lc = jnp.linspace(0,5,2000, endpoint=False)
-light_curve_data = vmap(partial(surface_light_curve, star_interferometry.surface, r=0., x=1., y=1., z=1.))(theta=star_interferometry.rotational_phase(t_lc))
-plt.scatter(t_lc, light_curve_data, s=1, c='k');
-plt.xlabel("Time (days)")
-plt.ylabel("Normalized flux")
-plt.savefig(paths.figures / 'light_curve.pdf', bbox_inches="tight", dpi=300)
-lc_noise = 1e-4
-#light_curve_data+= jax.random.normal(jax.random.PRNGKey(0), light_curve_data.shape)*lc_noise #don't have to actually add in noise for custom loglike
+opt_params = ['data','u']
+print("Creating the Fisher information matrices...")
+fim_vis = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_visibility, 
+                            data=vis_data, 
+                            u=u.T, v=v.T,t=sub_times, noise=noise)
+fim_cp = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_cp, data=cp_data, u=u.T, v=v.T,t=sub_times, noise=noise*360,
+                           index_cps1=cp_inds[0:10,0], index_cps2=cp_inds[0:10,1], index_cps3=cp_inds[0:10,2])
 
-print("Creating the Fisher information matrix for the light curve...")
-fim_lc = -zdx.fisher_matrix(star_interferometry, opt_params,loglike_photometry, data=light_curve_data, noise=lc_noise, t=t_lc)
+lm_to_n = lambda l,m : l**2+l+m
+l_max = lambda y: int(jnp.floor(jnp.sqrt(len(y)-1)))
+lmax = l_max(y_star)
+print(f"l_max = {lmax}")
+def rearrange_m_inds(l_max):
+    inds = []
+    for m in range(-l_max,l_max+1):
+        for l in range(abs(m), l_max+1):
+            inds.append(lm_to_n(l,m))
+    return jnp.array(inds)
 
-print("Plotting the Fisher info for the light curve...")
+print("Plotting the Fisher information matrices...")
 fig = plt.figure()
-plt.imshow(fim_lc[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r', origin='lower')
-#plt.imshow(fim_lc, cmap='RdBu_r', norm=colors.SymLogNorm(linthresh=1e4, linscale=1.0,
+
+cutoff_n = nmax(CUTOFF)
+plt.imshow(fim_vis[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_vis),vmax=jnp.max(fim_vis),  cmap='RdBu_r', origin='lower')
+plt.colorbar()
+tick_labels = jnp.arange(1,CUTOFF+1)
+tick_positions = [nmax(i) for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'rotation_synthesis/FIM_vis.pdf', bbox_inches="tight")
+
+fig = plt.figure()
+plt.imshow(fim_cp[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_cp),vmax=jnp.max(fim_cp),  cmap='RdBu_r', origin='lower')
+plt.colorbar()
+tick_labels = jnp.arange(1,CUTOFF+1)
+tick_positions = [nmax(i) for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'rotation_synthesis/FIM_cp.pdf', bbox_inches="tight")
+
+fig = plt.figure()
+plt.imshow((fim_cp+fim_vis)[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r', origin='lower')
+#plt.imshow(fim_cp+fim_vis, cmap='RdBu_r', norm=colors.SymLogNorm(linthresh=1e4, linscale=1.0,
 #                                              vmin=-10*jnp.max(fim_cp+fim_vis),vmax=10*jnp.max(fim_cp+fim_vis), base=10))
 plt.colorbar()
 tick_labels = jnp.arange(1,CUTOFF+1)
@@ -304,28 +346,65 @@ tick_positions = [nmax(i) for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'FIM_lc.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'rotation_synthesis/FIM_vis_cp.pdf', bbox_inches="tight")
 
-total_fim = fim_cp+fim_vis+fim_lc
-fig = plt.figure()
-plt.imshow(total_fim[0:cutoff_n,0:cutoff_n],vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r', origin='lower')
-#plt.imshow(total_fim, cmap='RdBu_r', norm=colors.SymLogNorm(linthresh=1e4, linscale=1.0,
-#                        vmin=-10*jnp.max(fim_cp+fim_vis),vmax=10*jnp.max(fim_cp+fim_vis), base=10))
+fig = plt.figure(figsize=(10, 10))
+plt.imshow((fim_cp+fim_vis),vmin=-jnp.max(fim_cp+fim_vis),vmax=jnp.max(fim_cp+fim_vis),  cmap='RdBu_r', origin='lower')
+#plt.imshow(fim_cp+fim_vis, cmap='RdBu_r', norm=colors.SymLogNorm(linthresh=1e4, linscale=1.0,
+#                                              vmin=-10*jnp.max(fim_cp+fim_vis),vmax=10*jnp.max(fim_cp+fim_vis), base=10))
 plt.colorbar()
-tick_labels = jnp.arange(1,CUTOFF+1)
+tick_labels = jnp.arange(1,lmax+1)
 tick_positions = [nmax(i) for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'FIM_total.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'rotation_synthesis/FIM_vis_cp_full.pdf', bbox_inches="tight")
 
+print("FIM determinant (rotation synthesis): " + str(jnp.linalg.slogdet(fim_cp+fim_vis)))
+
+print("Plotting the covariance matrices...")
 fig = plt.figure()
-total_cov = jnp.linalg.inv(total_fim[0:cutoff_n,0:cutoff_n])
-plt.imshow(total_cov, cmap='RdBu_r',vmin=-jnp.max(total_cov),vmax=jnp.max(total_cov), origin='lower')
+cov_vis = -jnp.linalg.inv(-(fim_vis))
+plt.imshow(cov_vis[0:cutoff_n,0:cutoff_n], cmap='RdBu_r',vmin=-jnp.max(cov_vis),vmax=jnp.max(cov_vis), origin='lower')
 plt.colorbar()
 tick_labels = jnp.arange(1,CUTOFF+1)
-tick_positions = [nmax(i) for i in tick_labels-1]
+tick_positions = [nmax(i)-1 for i in tick_labels-1]
 plt.xticks(tick_positions, tick_labels)
 plt.yticks(tick_positions, tick_labels)
 plt.grid(True,linestyle=':',color='black',alpha=1)
-plt.savefig(paths.figures / f'cov_vis_cp_lc.pdf', bbox_inches="tight")
+plt.savefig(paths.figures / f'rotation_synthesis/cov_vis.pdf', bbox_inches="tight")
+
+fig = plt.figure()
+cov_cp = -jnp.linalg.inv(-(fim_cp))
+plt.imshow(cov_cp[0:cutoff_n,0:cutoff_n], cmap='RdBu_r',vmin=-jnp.max(cov_cp),vmax=jnp.max(cov_cp), origin='lower')
+plt.colorbar()
+tick_labels = jnp.arange(1,CUTOFF+1)
+tick_positions = [nmax(i)-1 for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'rotation_synthesis/cov_cp.pdf', bbox_inches="tight")
+
+fig = plt.figure()
+cov = -jnp.linalg.inv(-(fim_cp+fim_vis))
+plt.imshow(cov[0:cutoff_n,0:cutoff_n], cmap='RdBu_r',vmin=-jnp.max(cov),vmax=jnp.max(cov), origin='lower')
+plt.colorbar()
+tick_labels = jnp.arange(1,CUTOFF+1)
+tick_positions = [nmax(i)-1 for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'rotation_synthesis/cov_vis_cp.pdf', bbox_inches="tight")
+
+fig = plt.figure(figsize=(10, 10))
+cov = -jnp.linalg.inv(-(fim_cp+fim_vis))
+plt.imshow(cov, cmap='RdBu_r',vmin=-jnp.max(cov),vmax=jnp.max(cov), origin='lower')
+plt.colorbar()
+tick_labels = jnp.arange(1,lmax+1)
+tick_positions = [nmax(i)-1 for i in tick_labels-1]
+plt.xticks(tick_positions, tick_labels)
+plt.yticks(tick_positions, tick_labels)
+plt.grid(True,linestyle=':',color='black',alpha=1)
+plt.savefig(paths.figures / f'rotation_synthesis/cov_vis_cp_full.pdf', bbox_inches="tight")
+
+print("Covariance trace (no rotation synthesis): " + str(jnp.linalg.trace(cov)))

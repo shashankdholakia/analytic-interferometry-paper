@@ -27,15 +27,18 @@ plt.rcParams.update({'font.size': 12})
 load = Loader(paths.data)
 
 
+PERIOD = 5.1  # Rotation period of the star in days
+ROTATIONAL_PHASES = 8  # Number of rotational phases to consider
+
 HOUR_ANGLES = 50
-#using SPICA lowres
+
 WAVS = 1
 
 # Assume you have a Surface object with an intensity method
 # For example:
 y_star = np.load(paths.data / "SPOT_map_highres.npy")
 y = Ylm.from_dense(y_star)
-star = Surface(y=y, inc=jnp.radians(60.), obl=0, period=1.0)
+star = Surface(y=y, inc=jnp.radians(60.), obl=0, period=PERIOD)
 
 # 1. Create longitude and latitude meshgrid
 n_lon = 360*2
@@ -97,7 +100,7 @@ ax[0].tick_params(axis='y', labelleft=False)   # Hide y-axis tick labels
 #fig.colorbar(pcm, ax=ax[0], orientation='vertical')
 # ---------------------
 # (Optional) Fill in ax_ortho and ax_data with your content later
-times = jnp.linspace(0, 1, 8)  # Example times for the orthographic views
+times = jnp.linspace(0, PERIOD, 8)  # Example times for the orthographic views
 for n in range(8):
     show_surface(star, ax=ax_ortho[n], cmap='plasma', theta=star.rotational_phase(times[n]))
 
@@ -170,14 +173,17 @@ for i in range(u.shape[1]):
 ax[1].set_xlabel("U (baseline/$\lambda$)")
 ax[1].set_ylabel("V (baseline/$\lambda$)")
 
+window_size = 4/24 # how many hours per night
+sub_offsets = np.linspace(-window_size/2, window_size/2, HOUR_ANGLES)
+
 radius = 1.47/2.
 star_interferometry = Harmonix(star, radius)
-vis_data = visibilities(star_interferometry, jnp.array(u.T), jnp.array(v.T), times)
+vis_data = jnp.array([visibilities(star_interferometry, jnp.array(u.T), jnp.array(v.T), time + sub_offsets) for time in times])
 
 print("Visibility data shape: " + str(vis_data.shape))
-for n in range(8):
+for n in range(ROTATIONAL_PHASES):
     for i in range(u.shape[1]):
-        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2), vis_data[n,i,:], alpha=1.0,color=colors[i], lw=0.5, rasterized=True)
+        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2), vis_data[n,:,i,:].T, alpha=1.0,color=colors[i], lw=0.5, rasterized=True)
     
 
 ax_data[0].set_xlabel('Spatial Frequency (lambdas)')
