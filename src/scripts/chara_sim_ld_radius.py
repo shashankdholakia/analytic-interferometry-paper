@@ -219,7 +219,7 @@ ax2.set_yscale('log')
 ax2.legend(loc='upper right')
 ax.set_xmargin(0)
 ax2.set_xmargin(0)
-ax.set_ymargin(0)
+#ax.set_ymargin(0)
 fig.savefig(paths.figures / f"chara_sim_angular_diameter.pdf")
 
 

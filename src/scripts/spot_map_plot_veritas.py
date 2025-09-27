@@ -30,7 +30,7 @@ load = Loader(paths.data)
 PERIOD = 5.1  # Rotation period of the star in days
 ROTATIONAL_PHASES = 8  # Number of rotational phases to consider
 
-HOUR_ANGLES = 50
+HOUR_ANGLES = 10
 
 WAVS = 1
 
@@ -83,8 +83,9 @@ ax_ortho = [
 ]
 
 # Bottom panel for data
-ax_data = [plt.subplot2grid((45, 8), (18, 0), rowspan=12, colspan=8)]
+ax_data = [plt.subplot2grid((45, 8), (18, 0), rowspan=8, colspan=8)]
 
+ax_data.append(plt.subplot2grid((45, 8), (28, 0), rowspan=8, colspan=8))
 
 # ---------------------
 # Plot the Mollweide map
@@ -183,12 +184,28 @@ vis_data = jnp.array([visibilities(star_interferometry, jnp.array(u.T), jnp.arra
 print("Visibility data shape: " + str(vis_data.shape))
 for n in range(ROTATIONAL_PHASES):
     for i in range(u.shape[1]):
-        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2), vis_data[n,:,i,:].T, alpha=1.0,color=colors[i], lw=0.5, rasterized=True)
+        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2)/1e6, vis_data[n,:,i,:].T, alpha=1.0,color=colors[i], lw=0.1, zorder=3, ls='-')
     
 
-ax_data[0].set_xlabel('Spatial Frequency (lambdas)')
+ax_data[0].set_xlabel(r'Spatial Frequency (M$\lambda$)')
 ax_data[0].set_xlim(left=0)
 ax_data[0].set_ylim(bottom=0, top=1.0)
 ax_data[0].set_ylabel('Visibility Amplitude')
 
-plt.savefig(paths.figures / 'spot_map_veritas.pdf', bbox_inches="tight", dpi=300)
+@zdx.filter_jit
+def lc_func(model, t):
+    theta = model.rotational_phase(t)
+    y = Ylm.from_dense(jnp.concatenate([jnp.array([1.0]), model.data]))
+    star = Surface(y=y, inc=model.surface.inc, obl=model.surface.obl, period=model.surface.period, u=model.surface.u)
+    light_curve = vmap(partial(surface_light_curve, star, r=0., x=1., y=1., z=1.))(theta=theta)
+    return light_curve
+
+t_lc = jnp.linspace(0.,PERIOD,2000, endpoint=False)
+light_curve = vmap(partial(surface_light_curve, star_interferometry.surface, r=0., x=1., y=1., z=1.))(theta=star_interferometry.rotational_phase(t_lc))
+
+ax_data[1].scatter(t_lc, light_curve, s=1, color='k', alpha=0.5)
+ax_data[1].set_xlabel("Time [days]")
+ax_data[1].set_ylabel("Normalized Flux")
+ax_data[1].set_xlim(0, PERIOD)
+
+plt.savefig(paths.figures / 'spot_map_veritas.pdf', bbox_inches="tight", dpi=400)

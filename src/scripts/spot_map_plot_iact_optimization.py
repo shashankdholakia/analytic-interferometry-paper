@@ -38,11 +38,11 @@ load = Loader(paths.data)
 PERIOD = 5.1  # Rotation period of the star in days
 ROTATIONAL_PHASES = 8  # Number of rotational phases to consider
 
-HOUR_ANGLES = 50
+HOUR_ANGLES = 10
 #using SPICA lowres
 WAVS = 1
 
-SNR = [20, 200, 2000]
+SNR = [20]
 
 opt_params = ["data"]
 
@@ -98,22 +98,24 @@ def loss_fn(model, vis_data, u, v, times, times_lc, lc_data, lmax=15):
     return (jnp.square((model_vis - vis_data)).mean()) + jnp.mean((model_lc - lc_data) ** 2) + tv_penalty
 
 
+import matplotlib.pyplot as plt
+
 ncols = 3
-nrows = (6 // ncols) + 1  # +1 for the true image on top
+nrows = 1  # single row: true image + 2 optimized
 
 fig, axes = plt.subplots(
-    nrows=nrows, ncols=ncols, 
-    subplot_kw={'projection': 'mollweide'}, 
+    nrows=nrows, ncols=ncols,
+    subplot_kw={'projection': 'mollweide'},
     figsize=(5 * ncols, 3.5 * nrows)
 )
 
-axes = axes.flatten()
+# Make sure axes is iterable
+if ncols == 1:
+    axes = [axes]
+else:
+    axes = axes.flatten()
 
-center_idx = ncols // 2
-
-for i in range(ncols):
-    if i != center_idx:
-        axes[i].axis('off')
+center_idx = 0
 # Assume you have a Surface object with an intensity method
 # For example:
 y_star = np.load(paths.data / "SPOT_map_highres.npy")
@@ -228,7 +230,7 @@ snr_lc = 1e4
 losses_all = []
 
 for i, snr in enumerate(SNR):
-    ax = axes[ncols + i]
+    ax = axes[1]
     key = jr.PRNGKey(0)
     vis_data = vis_true + jr.normal(key, vis_true.shape)/snr
     lc_data = light_curve_true + jr.normal(key, light_curve_true.shape)/snr_lc
@@ -392,7 +394,7 @@ snr_lc = 1e4
 losses_all = []
 
 for i, snr in enumerate(SNR):
-    ax = axes[2*ncols + i]
+    ax = axes[2]
     key = jr.PRNGKey(0)
     vis_data = vis_true + jr.normal(key, vis_true.shape)/(snr)
     lc_data = light_curve_true + jr.normal(key, light_curve_true.shape)/snr_lc

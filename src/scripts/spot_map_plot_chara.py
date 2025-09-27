@@ -185,7 +185,7 @@ cp_data = closure_phases(star_interferometry, jnp.array(u.T), jnp.array(v.T),tim
 print("Visibility data shape: " + str(vis_data.shape))
 for n in range(8):
     for i in range(u.shape[1]):
-        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2), vis_data[n,i,:], alpha=0.5,color=colors[i], lw=0.5, rasterized=True)
+        ax_data[0].plot(jnp.sqrt(u[:,i]**2+v[:,i]**2)/1e6, vis_data[n,i,:], alpha=0.5,color=colors[i], lw=0.5, rasterized=True)
     
     #get the maximum baseline for each closure phase
     cp_x_axis = []
@@ -220,12 +220,12 @@ for n in range(8):
         
     cp_x_color = np.array(cp_x_color)
     for i in range(len(cp_x_color)):
-        ax_data[1].scatter(cp_x_axis[i], cp_data[n,i,:], color=colors[cp_x_color[i]], rasterized=True, s=1)
+        ax_data[1].scatter(cp_x_axis[i]/1e6, cp_data[n,i,:], color=colors[cp_x_color[i]], rasterized=True, s=1)
 
-ax_data[0].set_xlabel('Spatial Frequency (lambdas)')
+ax_data[0].set_xlabel(r'Spatial Frequency (M$\lambda$)')
 ax_data[0].set_xlim(left=0)
 ax_data[0].set_ylabel('Visibility Amplitude')
-ax_data[1].set_xlabel("Spatial frequency at max baseline (lambdas)")
+ax_data[1].set_xlabel(r"Spatial frequency at max baseline (M$\lambda$)")
 ax_data[1].set_xlim(left=0)
 ax_data[1].set_ylabel("Closure Phase (degrees)")
 

@@ -33,7 +33,7 @@ load = Loader(paths.data)
 PERIOD = 5.1  # Rotation period of the star in days
 ROTATIONAL_PHASES = 8  # Number of rotational phases to consider
 
-HOUR_ANGLES = 50
+HOUR_ANGLES = 10
 
 WAVS = 1
 
@@ -243,7 +243,7 @@ baseline_max = baseline_lengths.max(axis=0)      # one value per baseline
 norm = baseline_max / baseline_max.max()
 
 # Map to plasma colormap
-cmap = plt.cm.plasma
+cmap = plt.cm.winter
 colors = cmap(norm)   # shape (Nbaselines, 4)
 for i in range(u.shape[1]):
     ax[1].scatter(u[:,i],v[:,i],color=colors[i],s=2.)
@@ -345,8 +345,8 @@ baseline_max = baseline_lengths.max(axis=0)      # one value per baseline
 # Normalize to [0,1] for colormap
 norm = baseline_max / baseline_max.max()
 
-# Map to plasma colormap
-cmap = plt.cm.plasma
+# Map to winter colormap
+cmap = plt.cm.winter
 colors = cmap(norm)   # shape (Nbaselines, 4)
 for i in range(u.shape[1]):
     ax[2].scatter(u[:,i],v[:,i],color=colors[i],s=2.)
